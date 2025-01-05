@@ -1,0 +1,113 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+  labels:
+    app: web-app
+spec:
+  replicas: 4  # количество реплик для обработки пиковых нагрузок
+  selector:
+    matchLabels:
+      app: web-app
+  template:
+    metadata:
+      labels:
+        app: web-app
+    spec:
+      affinity:
+        # Распределение подов по зонам для повышения отказоустойчивости
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - web-app
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: web-app-container
+          image: your-web-app-image:latest
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: "100m"   # минимальные ресурсы CPU для обычной работы
+              memory: "128Mi"  # минимальные ресурсы памяти
+            limits:
+              cpu: "1"   # пиковые ресурсы CPU
+              memory: "256Mi"  # лимит памяти для пиковых нагрузок
+          startupProbe:
+            # Проверка готовности, учитывая время инициализации
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10  # Задержка перед первой проверкой, учитывая время инициализации
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readiness
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: web-app-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: web-app
+  minReplicas: 2  # минимальное количество реплик для ночного времени (периоды низкой нагрузки)
+  maxReplicas: 10  # максимальное количество реплик для пиковых нагрузок
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        targetAverageUtilization: 50  # целевая нагрузка CPU для масштабирования
+    - type: Resource
+      resource:
+        name: memory
+        targetAverageUtilization: 60  # целевая нагрузка памяти для масштабирования
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-app-ingress
+spec:
+  rules:
+    - host: webapp.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web-app-service
+                port:
+                  number: 8080
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-app-service
+spec:
+  selector:
+    app: web-app
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+  type: ClusterIP  # Тип сервиса, используем ClusterIP для внутренней доступности
