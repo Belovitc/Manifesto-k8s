@@ -63,20 +63,25 @@ metadata:
   name: web-app-hpa
 spec:
   scaleTargetRef:
-    apiVersion: apps/v1
+    apiVersion: apps/v1  # для Deployment
     kind: Deployment
     name: web-app
-  minReplicas: 2  # минимальное количество реплик для ночного времени (периоды низкой нагрузки)
+  minReplicas: 2  # минимальное количество реплик для ночного времени
   maxReplicas: 10  # максимальное количество реплик для пиковых нагрузок
   metrics:
     - type: Resource
       resource:
         name: cpu
-        targetAverageUtilization: 50  # целевая нагрузка CPU для масштабирования
+        target:
+          type: Utilization
+          averageUtilization: 50  # целевая нагрузка CPU для масштабирования
     - type: Resource
       resource:
         name: memory
-        targetAverageUtilization: 60  # целевая нагрузка памяти для масштабирования
+        target:
+          type: Utilization
+          averageUtilization: 60  # целевая нагрузка памяти для масштабирования
+
 
 ---
 apiVersion: networking.k8s.io/v1
